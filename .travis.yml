@@ -3,15 +3,14 @@ dist: bionic
 language: minimal
 env:
   matrix:
-    - ARCH=x86_64
     - ARCH=armhf
-    - ARCH=aarch64
-    - ARCH=ppc64le
 install:
-  - sudo ./alpine-chroot-install
+  - sudo ./raspbian-chroot-install
 script:
-  - /alpine/enter-chroot uname -a
-  - /alpine/enter-chroot env
-  - /alpine/enter-chroot -u $USER env
-  - sudo /alpine/enter-chroot -u $USER env
-  - test "$(/alpine/enter-chroot printf %s! 'Hello, world')" = 'Hello, world!'
+  - /raspbian/raspbian-chroot mount
+  - /raspbian/raspbian-chroot enter uname -a
+  - /raspbian/raspbian-chroot enter env
+  - /raspbian/raspbian-chroot enter -u $USER env
+  - sudo /raspbian/raspbian-chroot enter -u $USER env
+  - test "$(/raspbian/raspbian-chroot enter printf %s! 'Hello, world')" = 'Hello, world!'
+  - /raspbian/raspbian-chroot umount

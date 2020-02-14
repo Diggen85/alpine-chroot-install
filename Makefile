@@ -1,4 +1,4 @@
-SCRIPT_NAME := alpine-chroot-install
+SCRIPT_NAME := raspian-chroot-install
 
 DESTDIR := /
 PREFIX := /usr/local
@@ -11,11 +11,11 @@ ifeq ($(shell uname -s),Darwin)
 	SHA1SUM := shasum -a 1
 endif
 
-#: Update version in the script and README.adoc to $VERSION.
+#: Update version in the script and README.md to $VERSION.
 bump-version:
 	test -n "$(VERSION)"  # $$VERSION
 	$(SED) -E -i "s/^(VERSION)=.*/\1='$(VERSION)'/" $(SCRIPT_NAME)
-	$(SED) -E -i "s/^(:version:).*/\1 $(VERSION)/" README.adoc
+	$(SED) -E -i "s/^(:version:).*/\1 $(VERSION)/" README.md
 
 #: Install the script into $DESTDIR.
 install:
@@ -26,7 +26,7 @@ install:
 readme-update-checksum:
 	$(SED) -E -i \
 		-e "s/^(:script-sha1:).*/\1 $(shell $(SHA1SUM) $(SCRIPT_NAME) | cut -d ' ' -f 1)/" \
-		README.adoc
+		README.md
 
 #: Bump version to $VERSION, create release commit and tag.
 release: .check-git-clean | bump-version readme-update-checksum
