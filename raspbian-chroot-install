@@ -65,6 +65,8 @@ set -e # halt on error
 shopt -s expand_aliases #expand alias
 
 #=======================  C o n s t a n t s  =======================#
+#Script requirements
+RCH_REQUIREMENTS="parted"
 
 # Minimal required version of QEMU emulator.
 QEMU_MIN_VER='2.6'
@@ -131,7 +133,6 @@ make_chroot_image() (
 	einfo "Extract $tmpzip to $CHROOT_DIR"
 	unzip -d "$CHROOT_DIR" "$tmpzip"	
 	einfo "Raspbian chroot image is ${CHROOT_DIR}/${imgname}"
-	expand_image ${CHROOT_DIR}/${imgname} ${IMAGE_SIZEADD}
 	rm -f "$tmpzip"
 )
 
@@ -146,30 +147,41 @@ gen_chroot_script() {
 	exps="${exps}\nexport RASPBIAN_IMAGE=$RASPBIAN_IMAGE"
 	exps="${exps}\nexport CHROOT_DIR=$CHROOT_DIR"
 	exps="${exps}\nexport ENV_FILTER_REGEX='($(echo "$CHROOT_KEEP_VARS" | tr -s ' ' '|'))'"
-	if [ -n "$QEMU_EMULATOR" ]; then
-		exps"${exps}\nexport QEMU_EMULATOR=$QEMU_EMULATOR"
-	fi
 
 cat <<-EOF
 		#!/bin/sh
-		
-		export CHROOT_LOOPDEV=""
 		set -e
+		#DEBUG
+		#set -x		
+		export MOUNTED_LOOPDEV="" #DYNREPLACE
 EOF
  echo -e $exps
 cat <<-'EOF'
 		[ "$(id -u)" -eq 0 ] || _sudo='sudo'
     
-		case $1 in
-		mount)
-			CHROOT_LOOPDEV=$($_sudo losetup -fP --show ${RASPBIAN_IMAGE})
-			
-			$_sudo sed -i 's/export CHROOT_LOOPDEV=""/export CHROOT_LOOPDEV=${CHROOT_LOOPDEV}/' $0
+	setup_loopdev() {
+		echo "Setup loopdev for ${RASPBIAN_IMAGE}"
+		export CHROOT_LOOPDEV=$($_sudo losetup -fP --show ${RASPBIAN_IMAGE})
+		echo "loopdev is ${CHROOT_LOOPDEV}"
+		$_sudo sed -i "s|^export MOUNTED_LOOPDEV=.*#DYNREPLACE$|MOUNTED_LOOPDEV=${CHROOT_LOOPDEV} #DYNREPLACE|" $0
+	}
 
-			if [ "$#" = "3" ] && [ "$2" = "addsize" ]; then
-				resize2fs ${CHROOT_LOOPDEV}p2 $3
-				e2fsck -f ${CHROOT_LOOPDEV}p2
+	case $1 in
+		addsize)
+			if [ "$#" = "2" ] &&  [ -f ${RASPBIAN_IMAGE} ]; then
+				echo "Extending ${RASPBIAN_IMAGE} with $2 MB"
+				$_sudo dd if=/dev/zero of=${RASPBIAN_IMAGE} conv=notrunc oflag=append bs=1M count=$2
+				setup_loopdev
+				$_sudo parted -s ${CHROOT_LOOPDEV} "resizepart 2 100%" quit
+				$_sudo parted -s ${CHROOT_LOOPDEV} print quit | sed -n "7,+2 p"
+				resize2fs ${CHROOT_LOOPDEV}p2
+				e2fsck -y -f ${CHROOT_LOOPDEV}p2
+				losetup -d ${CHROOT_LOOPDEV}
 			fi
+		;;
+
+		mount)
+			setup_loopdev
 
 			# mount partition
 			$_sudo mkdir -p ${CHROOT_DIR}/mnt
@@ -195,14 +207,17 @@ cat <<-'EOF'
 
 			$_sudo cp /etc/resolv.conf ${CHROOT_DIR}/mnt/etc/resolv.conf
 			;;
+
 		umount) 
-			#for mnt in $(mount | grep ${CHROOT_DIR}/mnt | cut -d" " -f3 | sort -r); do
-			#	$_sudo umount -fq $mnt
-			#done
+			if [ ! -f "{$MOUNTED_LOOPDEV}"] ; then
+				echo "Have no mounted loopdev. Trying to unmount all"
+				losetup -D 
+				exit $?
+			fi
 			$_sudo umount --detach-loop --all-targets --recursive --force --verbose ${CHROOT_DIR}/mnt
 
-			$_sudo losetup -d ${CHROOT_LOOPDEV}
-			$_sudo sed -i 's/export CHROOT_LOOPDEV=${CHROOT_LOOPDEV}/export CHROOT_LOOPDEV=""/' $0
+			$_sudo losetup -d ${MOUNTED_LOOPDEV}
+			$_sudo sed -i "s|^export MOUNTED_LOOPDEV=.*#DYNREPLACE$|MOUNTED_LOOPDEV= #DYNREPLACE|" $0
 			;;
 		enter)
 		  shift 1
@@ -269,6 +284,11 @@ install_qemu_user() {
 		|| die 'Failed to install qemu-user-static using apt-get!'
 }
 
+install_requirements() {
+	einfo "Installing script requirements: $RCH_REQUIREMENTS"
+	apt_install $RCH_REQUIREMENTS \
+		|| die "Failes installing requirements!"
+}
 
 #============================  M a i n  ============================#
 
@@ -299,6 +319,8 @@ if [ "$(id -u)" -ne 0 ]; then
 	die 'This script must be run as root!'
 fi
 
+install_requirements
+
 einfo "Create Working Dir - $CHROOT_DIR"
 mkdir -p ${CHROOT_DIR}
 cd ${CHROOT_DIR}
@@ -317,8 +339,8 @@ einfo "Creating ${CHROOT_DIR}/raspbian-chroot"
 gen_chroot_script > ${CHROOT_DIR}/raspbian-chroot
 chmod 755 ${CHROOT_DIR}/raspbian-chroot
 
-${CHROOT_DIR}/raspbian-chroot mount addsize $IMAGE_SIZEADD
-
+${CHROOT_DIR}/raspbian-chroot addsize $IMAGE_SIZEADD
+${CHROOT_DIR}/raspbian-chroot mount 
 
 # Install QEMU user mode emulation if needed (works only on Debian and derivates)
 QEMU_EMULATOR=''
@@ -359,10 +381,10 @@ EOF
 
 cat >&2 <<-EOF
 	---
-	Raspbian installation is complete
+	Raspbian installation is complete and mount.
 	 - Run $CHROOT_DIR/raspbian-chroot enter [-u pi|<user>] [command] to enter the chroot.
+
 	 - Run $CHROOT_DIR/raspbian-chroot umount to clean and umount the chroot
 	 - Run $CHROOT_DIR/raspbian-chroot mount to setup the chroot again
-
 EOF
 
