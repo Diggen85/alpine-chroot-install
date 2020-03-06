@@ -1,5 +1,5 @@
 # Install Raspbian Linux in chroot 
-##About
+## About
 
 This `raspbian-chroot-install` script simplifies installation of [Raspbian](https://www.raspbian.org/) in chroot.
 It utilizes _qemu-user_ and _binfmt_ to emulate armhf.
@@ -29,3 +29,10 @@ The Script works for me, in my netinst Debian VM. I can not guarantee that it wi
 
 This project is licensed under [MIT License](http://opensource.org/licenses/MIT/).
 For the full text of the license, see the LICENSE file.
+<<<<<<< HEAD
+=======
+
+### META
+:script-sha1: 
+:version: 
+>>>>>>> 09e63d069e8ca94a34836d7489776033b4884756
