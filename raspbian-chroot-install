@@ -163,7 +163,7 @@ cat <<-'EOF'
 		echo "Setup loopdev for ${RASPBIAN_IMAGE}"
 		export CHROOT_LOOPDEV=$($_sudo losetup -fP --show ${RASPBIAN_IMAGE})
 		echo "loopdev is ${CHROOT_LOOPDEV}"
-		$_sudo sed -i "s|^export MOUNTED_LOOPDEV=.*#DYNREPLACE$|MOUNTED_LOOPDEV= #DYNREPLACE|" $0
+		$_sudo sed -i "s|^export MOUNTED_LOOPDEV=.*#DYNREPLACE$|MOUNTED_LOOPDEV=${RASPBIAN_IMAGE} #DYNREPLACE|" $0
 	}
 
 	case $1 in
