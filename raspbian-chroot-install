@@ -42,7 +42,8 @@
 #   -k CHROOT_KEEP_VARS... Names of the environment variables to pass from the
 #                          host environment into chroot by the enter-chroot
 #                          script. Name may be an extended regular expression.
-#                          Default: ARCH CI QEMU_EMULATOR TRAVIS_.*.
+#                          Default: QEMU_EMULATOR,ARCH
+#													 Maybe usefull: CI TRAVIS_.* 
 #
 #   -p RASPBIAN_PACKAGES...Raspbian packages to install into the chroot (default is
 #                          build-essential git ).
@@ -146,13 +147,11 @@ gen_chroot_script() {
 	local exps=""
 	exps="${exps}\nexport RASPBIAN_IMAGE=$RASPBIAN_IMAGE"
 	exps="${exps}\nexport CHROOT_DIR=$CHROOT_DIR"
-	exps="${exps}\nexport ENV_FILTER_REGEX='($(echo "$CHROOT_KEEP_VARS" | tr -s ' ' '|'))'"
+	exps="${exps}\nexport ENV_WHITELIST='($(echo "$CHROOT_KEEP_VARS" | tr -s ' ' ','))'"
 
 cat <<-EOF
 		#!/bin/sh
-		set -e
-		#DEBUG
-		#set -x		
+		set -e		
 		export MOUNTED_LOOPDEV="" #DYNREPLACE
 EOF
  echo -e $exps
@@ -225,20 +224,18 @@ cat <<-'EOF'
 			if [ $# -ge 2 ] && [ "$1" = '-u' ]; then
 					user="$2"; shift 2
 			fi
-			oldpwd="$(pwd)"
+
 			[ "$(id -u)" -eq 0 ] || _sudo='sudo'
-
-			tmpfile="$(mktemp)"
-			chmod 644 "$tmpfile"
-			export | sed -En "s/^([^=]+ ${ENV_FILTER_REGEX}=)('.*'|\".*\")$/\1\3/p" > "$tmpfile" || true
-
+			
 			cd "${CHROOT_DIR}"
 
 			#TODO check if mounted
-			$_sudo mv "$tmpfile"  ${CHROOT_DIR}/mnt/env.sh
-			$_sudo chroot ${CHROOT_DIR}/mnt /usr/bin/env -i su -l "$user" \
-					/bin/bash -c ". /etc/profile; . /env.sh; cd '$oldpwd' 2>/dev/null; \"\$@\"" \
-					-- "${@:-/bin/bash}"
+			
+			#no need for env -i, su -l cleans environment except TERM - but this is usefull
+			# also -w does whitelist envvars
+			[ ! -z "${ENV_WHITELIST}" ] && whitelist="-w ${ENV_WHITELIST}"
+			[ $# -gt 0 ] && chrcmd="-c $@"
+			$_sudo chroot ${CHROOT_DIR}/mnt su -l "$user" $whitelist $chrcmd
 			;;
 		*)
 			echo "$0  [ mount | umount | enter ]"
@@ -311,7 +308,7 @@ done
 : ${IMAGE_SIZEADD:=4096}
 : ${ARCH:="armhf"}
 : ${CHROOT_DIR:="/raspbian"}
-: ${CHROOT_KEEP_VARS:="ARCH CI QEMU_EMULATOR TRAVIS_.*"}
+: ${CHROOT_KEEP_VARS:="ARCH QEMU_EMULATOR TERM.* COLORTERM LS_COLORS"}
 : ${TEMP_DIR:=$(mktemp -d || echo /tmp/raspbian)}
 
 
