@@ -221,7 +221,7 @@ cat <<-'EOF'
 			;;
 		enter)
 		  shift 1
-			user='root'
+			user='pi'
 			if [ $# -ge 2 ] && [ "$1" = '-u' ]; then
 					user="$2"; shift 2
 			fi
@@ -239,7 +239,7 @@ cat <<-'EOF'
 			$_sudo chroot ${CHROOT_DIR}/mnt su -l "$user" $whitelist $chrcmd
 			;;
 		*)
-			echo "$0  [ mount | umount | enter ]"
+			echo "$0  [ mount | umount | enter [ -u [user] ] ]"
 			;;
 	esac
 EOF
@@ -387,8 +387,8 @@ EOF
 cat >&2 <<-EOF
 	---
 	Raspbian installation is complete and mount.
-	 - Run $CHROOT_DIR/raspbian-chroot enter [-u pi|<user>] [command] to enter the chroot.
-
+	 - Run $CHROOT_DIR/raspbian-chroot enter [-u <user>] [command] to enter the chroot.
+	   Default is to enter as User pi.
 	 - Run $CHROOT_DIR/raspbian-chroot umount to clean and umount the chroot
 	 - Run $CHROOT_DIR/raspbian-chroot mount to setup the chroot again
 EOF
