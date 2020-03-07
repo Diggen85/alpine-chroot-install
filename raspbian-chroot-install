@@ -48,7 +48,8 @@
 #   -p RASPBIAN_PACKAGES...Raspbian packages to install into the chroot (default is
 #                          build-essential git ).
 #
-#   -s IMAGE_SIZEADD       Add MegaBytes to downloaded Image (default isc4096)
+#   -s IMAGE_SIZEADD       Add MegaBytes to downloaded Image (default is 4096)
+#													 Not for existing Images
 #
 #   -t TEMP_DIR            Absolute path to the directory where to store temporary
 #                          files (defaults to `mktemp -d`).
@@ -67,7 +68,7 @@ shopt -s expand_aliases #expand alias
 
 #=======================  C o n s t a n t s  =======================#
 #Script requirements
-RCH_REQUIREMENTS="parted"
+RCH_REQUIREMENTS="parted unzip"
 
 # Minimal required version of QEMU emulator.
 QEMU_MIN_VER='2.6'
@@ -173,8 +174,8 @@ cat <<-'EOF'
 				setup_loopdev
 				$_sudo parted -s ${CHROOT_LOOPDEV} "resizepart 2 100%" quit
 				$_sudo parted -s ${CHROOT_LOOPDEV} print quit | sed -n "7,+2 p"
-				resize2fs ${CHROOT_LOOPDEV}p2
 				e2fsck -y -f ${CHROOT_LOOPDEV}p2
+				resize2fs ${CHROOT_LOOPDEV}p2
 				losetup -d ${CHROOT_LOOPDEV}
 			fi
 		;;
@@ -310,7 +311,8 @@ done
 : ${CHROOT_DIR:="/raspbian"}
 : ${CHROOT_KEEP_VARS:="ARCH QEMU_EMULATOR TERM.* COLORTERM LS_COLORS"}
 : ${TEMP_DIR:=$(mktemp -d || echo /tmp/raspbian)}
-
+# Internal
+: ${IMG_EXISTS:="FALSE"}
 
 if [ "$(id -u)" -ne 0 ]; then
 	die 'This script must be run as root!'
@@ -326,7 +328,10 @@ cd ${CHROOT_DIR}
 
 if [ ! -f ${CHROOT_DIR}/*raspbian*img ]; then
 	einfo "Downloading the Image"
-	make_chroot_image "${RASPBIAN_URL}"	
+	make_chroot_image "${RASPBIAN_URL}"
+else
+	einfo "Using existing Image"
+	IMG_EXISTS="TRUE"	
 fi 				
 
 export RASPBIAN_IMAGE=$(ls ${CHROOT_DIR}/*raspbian*.img)
@@ -336,7 +341,10 @@ einfo "Creating ${CHROOT_DIR}/raspbian-chroot"
 gen_chroot_script > ${CHROOT_DIR}/raspbian-chroot
 chmod 755 ${CHROOT_DIR}/raspbian-chroot
 
-${CHROOT_DIR}/raspbian-chroot addsize $IMAGE_SIZEADD
+if [ "$IMG_EXISTS" = "FALSE" ]; then
+	${CHROOT_DIR}/raspbian-chroot addsize $IMAGE_SIZEADD
+fi
+
 ${CHROOT_DIR}/raspbian-chroot mount 
 
 # Install QEMU user mode emulation if needed (works only on Debian and derivates)
